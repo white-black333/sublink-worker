@@ -270,6 +270,16 @@ export function createApp(bindings = {}) {
             }
             const queryString = parsedUrl.search;
 
+            if (!queryString || queryString === '?') {
+                runtime.logger.warn?.('Empty query string in shorten request:', { url });
+                return c.text('URL must contain query parameters', 400);
+            }
+
+            runtime.logger.info?.('Creating short link:', {
+                queryStringLength: queryString.length,
+                shortCode: shortCode || 'auto-generated'
+            });
+
             const shortLinks = requireShortLinkService(services.shortLinks);
             const code = await shortLinks.createShortLink(queryString, shortCode);
             return c.text(code);
@@ -281,13 +291,35 @@ export function createApp(bindings = {}) {
     const redirectHandler = (prefix) => async (c) => {
         try {
             const code = c.req.param('code');
-            const shortLinks = requireShortLinkService(services.shortLinks);
-            const originalParam = await shortLinks.resolveShortCode(code);
-            if (!originalParam) return c.text('Short URL not found', 404);
+            runtime.logger.info?.('Resolving short link:', { code, prefix });
 
+            const shortLinks = requireShortLinkService(services.shortLinks);
+            const queryString = await shortLinks.resolveShortCode(code);
+
+            if (!queryString) {
+                runtime.logger.warn?.('Short code not found:', { code });
+                return c.text('Short URL not found', 404);
+            }
+
+            runtime.logger.info?.('Resolved short link:', {
+                code,
+                queryStringLength: queryString.length,
+                queryStringPreview: queryString.substring(0, 100)
+            });
+
+            // queryString already starts with '?', so just concatenate directly
             const url = new URL(c.req.url);
-            return c.redirect(`${url.origin}/${prefix}${originalParam}`);
+            const redirectUrl = `${url.origin}/${prefix}${queryString}`;
+
+            runtime.logger.info?.('Redirecting to:', { redirectUrl: redirectUrl.substring(0, 200) });
+            return c.redirect(redirectUrl);
         } catch (error) {
+            runtime.logger.error?.('Redirect handler error:', {
+                code: c.req.param('code'),
+                prefix,
+                error: error.message,
+                stack: error.stack
+            });
             return handleError(c, error, runtime.logger);
         }
     };
