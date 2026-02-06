@@ -410,6 +410,14 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
     }
 
     formatConfig() {
+        // Remove unsupported fields from DNS config which might have been merged from Clash config
+        if (this.config.dns && typeof this.config.dns === 'object') {
+            delete this.config.dns.enable;
+            delete this.config.dns.enabled;
+            delete this.config.dns.ipv6;
+            delete this.config.dns.use_hosts;
+        }
+
         const rules = generateRules(this.selectedRules, this.customRules);
         const { site_rule_sets, ip_rule_sets } = generateRuleSets(this.selectedRules, this.customRules);
 
