@@ -359,24 +359,7 @@ export function createApp(bindings = {}) {
 
             runtime.logger.info?.('Redirecting to:', { redirectUrl: redirectUrl.substring(0, 200) });
 
-            // Use HTML page with JavaScript redirect instead of HTTP redirect
-            // This bypasses browser limitations on redirect URL length in Location header
-            const html = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>Redirecting...</title>
-    <script>
-        window.location.replace(${JSON.stringify(redirectUrl)});
-    </script>
-</head>
-<body>
-    <p>Redirecting to configuration...</p>
-    <p>If you are not redirected automatically, <a href="${redirectUrl.replace(/"/g, '&quot;')}">click here</a>.</p>
-</body>
-</html>`;
-
-            return c.html(html);
+            return c.redirect(redirectUrl);
         } catch (error) {
             runtime.logger.error?.('Redirect handler error:', {
                 code: c.req.param('code'),
