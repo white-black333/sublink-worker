@@ -247,9 +247,18 @@ export function createApp(bindings = {}) {
         return c.text(encodeBase64(finalString));
     });
 
-    app.get('/shorten-v2', async (c) => {
+    app.on(['GET', 'POST'], '/shorten-v2', async (c) => {
         try {
-            const url = c.req.query('url');
+            let url, shortCode;
+            if (c.req.method === 'POST') {
+                const body = await c.req.json();
+                url = body.url;
+                shortCode = body.shortCode;
+            } else {
+                url = c.req.query('url');
+                shortCode = c.req.query('shortCode');
+            }
+
             if (!url) {
                 return c.text('Missing URL parameter', 400);
             }
@@ -262,7 +271,7 @@ export function createApp(bindings = {}) {
             const queryString = parsedUrl.search;
 
             const shortLinks = requireShortLinkService(services.shortLinks);
-            const code = await shortLinks.createShortLink(queryString, c.req.query('shortCode'));
+            const code = await shortLinks.createShortLink(queryString, shortCode);
             return c.text(code);
         } catch (error) {
             return handleError(c, error, runtime.logger);
@@ -484,9 +493,15 @@ function requireConfigStorage(service) {
 }
 
 function handleError(c, error, logger) {
+    logger.error?.('API Error:', {
+        path: c.req.path,
+        method: c.req.method,
+        message: error.message,
+        stack: error.stack
+    });
+
     if (error instanceof ServiceError) {
         return c.text(error.message, error.status);
     }
-    logger.error?.('Unhandled error', error);
     return c.text(`Error: ${error.message}`, 500);
 }
