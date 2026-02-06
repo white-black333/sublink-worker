@@ -410,12 +410,32 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
     }
 
     formatConfig() {
-        // Remove unsupported fields from DNS config which might have been merged from Clash config
+        // Sing-box is extremely strict about the config schema.
+        // We sanitize the DNS and Route objects by only keeping white-listed valid fields.
         if (this.config.dns && typeof this.config.dns === 'object') {
-            delete this.config.dns.enable;
-            delete this.config.dns.enabled;
-            delete this.config.dns.ipv6;
-            delete this.config.dns.use_hosts;
+            const validDnsKeys = [
+                'servers', 'rules', 'final', 'strategy',
+                'disable_cache', 'disable_expire', 'independent_cache',
+                'reverse_mapping', 'client_subnet', 'fakeip'
+            ];
+            const sanitizedDns = {};
+            validDnsKeys.forEach(key => {
+                if (this.config.dns[key] !== undefined) sanitizedDns[key] = this.config.dns[key];
+            });
+            this.config.dns = sanitizedDns;
+        }
+
+        if (this.config.route && typeof this.config.route === 'object') {
+            const validRouteKeys = [
+                'rules', 'rule_set', 'final', 'find_process', 'auto_detect_interface',
+                'override_android_untouchable_address', 'default_interface',
+                'default_mark', 'default_domain_resolver'
+            ];
+            const sanitizedRoute = {};
+            validRouteKeys.forEach(key => {
+                if (this.config.route[key] !== undefined) sanitizedRoute[key] = this.config.route[key];
+            });
+            this.config.route = sanitizedRoute;
         }
 
         const rules = generateRules(this.selectedRules, this.customRules);
