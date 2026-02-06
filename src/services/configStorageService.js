@@ -22,7 +22,9 @@ export class ConfigStorageService {
         try {
             return JSON.parse(stored);
         } catch {
-            throw new InvalidPayloadError('Stored config is not valid JSON');
+            // The stored content might be a raw string (e.g. for Xray/Surge subscription lists)
+            // or it was not serialized as JSON. Return as is.
+            return stored;
         }
     }
 
@@ -35,8 +37,8 @@ export class ConfigStorageService {
         const configId = `${type}_${generateWebPath(8)}`;
         const configString = this.serializeConfig(type, content);
 
-        // Validate string is JSON before storing
-        JSON.parse(configString);
+        // Removed strict JSON validation to support raw strings (e.g. proxy lists)
+        // JSON.parse(configString);
 
         const ttlSeconds = this.options.configTtlSeconds;
         const putOptions = ttlSeconds ? { expirationTtl: ttlSeconds } : undefined;

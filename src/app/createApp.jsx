@@ -70,9 +70,11 @@ export function createApp(bindings = {}) {
 
     app.get('/singbox', async (c) => {
         try {
-            const config = c.req.query('config');
-            if (!config) {
-                return c.text('Missing config parameter', 400);
+            let inputConfig = c.req.query('config');
+            const configId = c.req.query('configId');
+
+            if (!inputConfig && !configId) {
+                return c.text('Missing config parameter or configId', 400);
             }
 
             const selectedRules = parseSelectedRules(c.req.query('selectedRules'));
@@ -83,7 +85,7 @@ export function createApp(bindings = {}) {
             const enableClashUI = parseBooleanFlag(c.req.query('enable_clash_ui'));
             const externalController = c.req.query('external_controller');
             const externalUiDownloadUrl = c.req.query('external_ui_download_url');
-            const configId = c.req.query('configId');
+            // configId already declared above
             const lang = c.get('lang');
 
             const requestedSingboxVersion = c.req.query('singbox_version') || c.req.query('sb_version') || c.req.query('sb_ver');
@@ -95,12 +97,18 @@ export function createApp(bindings = {}) {
                 const storage = requireConfigStorage(services.configStorage);
                 const storedConfig = await storage.getConfigById(configId);
                 if (storedConfig) {
-                    baseConfig = storedConfig;
+                    if (!inputConfig) {
+                        // If no config param provided, configId content IS the input config
+                        inputConfig = typeof storedConfig === 'object' ? JSON.stringify(storedConfig) : storedConfig;
+                    } else if (typeof storedConfig === 'object') {
+                        // If config param provided, configId content is treated as baseConfig (if valid object)
+                        baseConfig = storedConfig;
+                    }
                 }
             }
 
             const builder = new SingboxConfigBuilder(
-                config,
+                inputConfig,
                 selectedRules,
                 customRules,
                 baseConfig,
@@ -122,9 +130,11 @@ export function createApp(bindings = {}) {
 
     app.get('/clash', async (c) => {
         try {
-            const config = c.req.query('config');
-            if (!config) {
-                return c.text('Missing config parameter', 400);
+            let inputConfig = c.req.query('config');
+            const configId = c.req.query('configId');
+
+            if (!inputConfig && !configId) {
+                return c.text('Missing config parameter or configId', 400);
             }
 
             const selectedRules = parseSelectedRules(c.req.query('selectedRules'));
@@ -135,17 +145,29 @@ export function createApp(bindings = {}) {
             const enableClashUI = parseBooleanFlag(c.req.query('enable_clash_ui'));
             const externalController = c.req.query('external_controller');
             const externalUiDownloadUrl = c.req.query('external_ui_download_url');
-            const configId = c.req.query('configId');
             const lang = c.get('lang');
 
             let baseConfig;
             if (configId) {
                 const storage = requireConfigStorage(services.configStorage);
-                baseConfig = await storage.getConfigById(configId);
+                const storedConfig = await storage.getConfigById(configId);
+                if (storedConfig) {
+                    if (!inputConfig) {
+                        // inputConfig 缺失，使用 storedConfig 作为输入
+                        inputConfig = typeof storedConfig === 'object' ? JSON.stringify(storedConfig) : storedConfig;
+                    } else {
+                        // inputConfig 存在，storedConfig 作为 baseConfig（必须是对象）
+                        if (typeof storedConfig === 'object') {
+                            baseConfig = storedConfig;
+                        }
+                    }
+                } else if (!inputConfig) {
+                    return c.text('Config not found for provided ID', 404);
+                }
             }
 
             const builder = new ClashConfigBuilder(
-                config,
+                inputConfig || '',
                 selectedRules,
                 customRules,
                 baseConfig,
@@ -168,9 +190,11 @@ export function createApp(bindings = {}) {
 
     app.get('/surge', async (c) => {
         try {
-            const config = c.req.query('config');
-            if (!config) {
-                return c.text('Missing config parameter', 400);
+            let inputConfig = c.req.query('config');
+            const configId = c.req.query('configId');
+
+            if (!inputConfig && !configId) {
+                return c.text('Missing config parameter or configId', 400);
             }
 
             const selectedRules = parseSelectedRules(c.req.query('selectedRules'));
@@ -178,17 +202,27 @@ export function createApp(bindings = {}) {
             const ua = c.req.query('ua') || DEFAULT_USER_AGENT;
             const groupByCountry = parseBooleanFlag(c.req.query('group_by_country'));
             const includeAutoSelect = c.req.query('include_auto_select') !== 'false';
-            const configId = c.req.query('configId');
             const lang = c.get('lang');
 
             let baseConfig;
             if (configId) {
                 const storage = requireConfigStorage(services.configStorage);
-                baseConfig = await storage.getConfigById(configId);
+                const storedConfig = await storage.getConfigById(configId);
+                if (storedConfig) {
+                    if (!inputConfig) {
+                        // If no config param provided, configId content IS the input config
+                        inputConfig = typeof storedConfig === 'object' ? JSON.stringify(storedConfig) : storedConfig;
+                    } else if (typeof storedConfig === 'object') {
+                        // If config param provided, configId content is treated as baseConfig (if valid object)
+                        baseConfig = storedConfig;
+                    }
+                } else if (!inputConfig) {
+                    return c.text('Config not found for provided ID', 404);
+                }
             }
 
             const builder = new SurgeConfigBuilder(
-                config,
+                inputConfig || '',
                 selectedRules,
                 customRules,
                 baseConfig,
@@ -208,7 +242,19 @@ export function createApp(bindings = {}) {
     });
 
     app.get('/xray', async (c) => {
-        const inputString = c.req.query('config');
+        let inputString = c.req.query('config');
+        const configId = c.req.query('configId');
+
+        if (configId && !inputString) {
+            try {
+                const storage = requireConfigStorage(services.configStorage);
+                const stored = await storage.getConfigById(configId);
+                if (stored) inputString = stored;
+            } catch (e) {
+                runtime.logger.warn?.('Failed to fetch config by ID for xray:', e);
+            }
+        }
+
         if (!inputString) {
             return c.text('Missing config parameter', 400);
         }
@@ -312,7 +358,25 @@ export function createApp(bindings = {}) {
             const redirectUrl = `${url.origin}/${prefix}${queryString}`;
 
             runtime.logger.info?.('Redirecting to:', { redirectUrl: redirectUrl.substring(0, 200) });
-            return c.redirect(redirectUrl);
+
+            // Use HTML page with JavaScript redirect instead of HTTP redirect
+            // This bypasses browser limitations on redirect URL length in Location header
+            const html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <script>
+        window.location.replace(${JSON.stringify(redirectUrl)});
+    </script>
+</head>
+<body>
+    <p>Redirecting to configuration...</p>
+    <p>If you are not redirected automatically, <a href="${redirectUrl.replace(/"/g, '&quot;')}">click here</a>.</p>
+</body>
+</html>`;
+
+            return c.html(html);
         } catch (error) {
             runtime.logger.error?.('Redirect handler error:', {
                 code: c.req.param('code'),
@@ -332,8 +396,12 @@ export function createApp(bindings = {}) {
     app.post('/config', async (c) => {
         try {
             const { type, content } = await c.req.json();
+            runtime.logger.info?.('Saving config:', { type, length: content?.length });
+
             const storage = requireConfigStorage(services.configStorage);
             const configId = await storage.saveConfig(type, content);
+
+            runtime.logger.info?.('Config saved:', { configId });
             return c.text(configId);
         } catch (error) {
             if (error instanceof SyntaxError) {

@@ -259,7 +259,46 @@ export const formLogicFn = (t) => {
                     // Construct URLs
                     const origin = window.location.origin;
                     const params = new URLSearchParams();
-                    params.append('config', this.input);
+
+                    // Check input length. If too large (> 2000 chars), save to storage first
+                    let finalConfigId = this.currentConfigId;
+
+                    if (this.input.length > 2000) {
+                        try {
+                            // Determine config type based on simple heuristics or default to singbox
+                            let type = 'singbox';
+                            if (this.input.trim().startsWith('proxies:')) type = 'clash';
+                            if (this.input.trim().startsWith('[General]')) type = 'surge';
+
+                            const response = await fetch(`${origin}/config`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    type: type,
+                                    content: this.input
+                                })
+                            });
+
+                            if (response.ok) {
+                                finalConfigId = await response.text();
+                                // Don't append large config content to URL
+                            } else {
+                                const err = `Failed to auto-save large config: ${response.status} ${response.statusText}`;
+                                console.error(err);
+                                alert(err + "\nTry saving it manually as a Base Config first.");
+                                this.loading = false;
+                                return;
+                            }
+                        } catch (e) {
+                            console.error('Error auto-saving config:', e);
+                            alert(`Error saving config: ${e.message}\nPlease try saving it manually first.`);
+                            this.loading = false;
+                            return;
+                        }
+                    } else {
+                        params.append('config', this.input);
+                    }
+
                     params.append('ua', this.customUA);
                     params.append('selectedRules', JSON.stringify(this.selectedRules));
                     params.append('customRules', JSON.stringify(customRules));
@@ -270,11 +309,12 @@ export const formLogicFn = (t) => {
                     if (this.externalController) params.append('external_controller', this.externalController);
                     if (this.externalUiDownloadUrl) params.append('external_ui_download_url', this.externalUiDownloadUrl);
 
-                    // Add configId if present in URL
+                    // Add configId
                     const urlParams = new URLSearchParams(window.location.search);
-                    const configId = this.currentConfigId || urlParams.get('configId');
-                    if (configId) {
-                        params.append('configId', configId);
+                    finalConfigId = finalConfigId || urlParams.get('configId');
+
+                    if (finalConfigId) {
+                        params.append('configId', finalConfigId);
                     }
 
                     const queryString = params.toString();
